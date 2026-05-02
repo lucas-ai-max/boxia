@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand */
+  --color-brand: #FF6B4A;
+  --color-brand-hover: #E55A3D;
+  --color-brand-soft: #FFF1ED;
+  --color-brand-strong: #C24228;
+
+  /* Neutrals (warm) */
+  --color-ink: #15130F;
+  --color-ink-2: #2A2620;
+  --color-muted: #6B655B;
+  --color-muted-2: #9A938A;
+  --color-line: #ECE8E0;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F7F5EF;
+  --color-bg: #FAF8F2;
+
+  /* Semantic */
+  --color-success: #15803D;
+  --color-success-soft: #DCFCE7;
+  --color-warning: #B45309;
+  --color-warning-soft: #FEF3C7;
+  --color-danger: #B91C1C;
+  --color-danger-soft: #FEE2E2;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(21,19,15,0.04), 0 4px 14px rgba(21,19,15,0.04);
+  --shadow-card-hover: 0 2px 4px rgba(21,19,15,0.06), 0 12px 28px rgba(21,19,15,0.06);
+  --shadow-pop: 0 8px 32px rgba(21,19,15,0.12);
+
+  /* Fonts */
+  --font-display: 'Inter Tight', 'Inter', -apple-system, system-ui, sans-serif;
+  --font-body: 'Inter', -apple-system, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+button { -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* Scrollbar slim */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* Focus ring consistente */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth iOS scroll */
+.app-scroll { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+
+/* Safe-area helpers */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Motion */
+@media (prefers-reduced-motion: no-preference) {
+  .anim-in { animation: in 240ms cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Texto seleção */
+::selection { background: var(--color-brand-soft); color: var(--color-ink); }

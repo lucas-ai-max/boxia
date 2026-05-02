@@ -1,0 +1,20 @@
+# Não é mais necessário — usamos Supabase como banco gerenciado.
+# Para rodar Postgres local em vez do Supabase, descomente o serviço abaixo
+# e ajuste DATABASE_URL para postgres://postgres:postgres@localhost:5432/boxia.
+
+# services:
+#   postgres:
+#     image: pgvector/pgvector:pg16
+#     container_name: boxia-postgres
+#     restart: unless-stopped
+#     environment:
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: postgres
+#       POSTGRES_DB: boxia
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - boxia-pg-data:/var/lib/postgresql/data
+#
+# volumes:
+#   boxia-pg-data:
