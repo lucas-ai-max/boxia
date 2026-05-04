@@ -124,6 +124,67 @@ Acesse `http://localhost:3000` no celular (mesma rede) para experimentar como PW
 | POST | `/library/import` | Importar batch (prints/vídeo histórico) |
 | GET | `/metrics` | Dashboard pessoal |
 
+## Deploy / atualização (produção)
+
+> Frontend: **Vercel** (auto-deploy a cada push em `main`).
+> Backend: **VPS** `85.155.186.214`, user `boxia`, PM2 process `boxia-api`, nginx `boxia-api.85.155.186.214.sslip.io` com SSL Let's Encrypt.
+
+### 1. Merge da branch de trabalho em `main` (PowerShell local)
+
+```powershell
+cd "c:\Projetos Cursor\BoxIA"
+git checkout main
+git merge chore/initial-import
+git push origin main
+```
+
+A Vercel faz o redeploy do frontend sozinha.
+
+### 2. Atualizar o backend na VPS
+
+```bash
+ssh root@85.155.186.214
+su - boxia                       # SEMPRE trocar pra user boxia
+cd ~/boxia
+git pull origin main
+cd backend
+npm run build
+pm2 restart boxia-api --update-env
+pm2 logs boxia-api --lines 8 --nostream
+```
+
+Saída esperada:
+```
+[db] pgvector + pgcrypto OK
+✓ BoxIA backend on http://localhost:3333
+  CORS allow: https://boxia.vercel.app
+  IA:         pronta
+```
+
+### 3. Quando alterar variáveis de ambiente
+
+```bash
+nano ~/boxia/backend/.env
+pm2 restart boxia-api --update-env   # --update-env é obrigatório, senão PM2 reusa env antigo em memória
+```
+
+### 4. PWA no iPhone
+
+1. Abre `https://boxia.vercel.app` no **Safari** (não Chrome iOS)
+2. Toca em **Compartilhar** → **Adicionar à Tela de Início**
+3. Abre pelo ícone novo na home — roda fullscreen como app
+4. Após updates: pode precisar deletar o ícone e adicionar de novo (Service Worker cacheia)
+
+### Troubleshooting rápido
+
+| Sintoma | Causa | Fix |
+|---|---|---|
+| `cd: /root/boxia: No such file or directory` | Logado como root | `su - boxia` |
+| `Process boxia-api not found` em `pm2` | PM2 do root, não do boxia | `su - boxia` antes |
+| CORS error no navegador | `.env` desatualizado em memória | `pm2 restart boxia-api --update-env` |
+| 502 Bad Gateway no nginx | Backend caiu | `pm2 logs boxia-api --lines 30 --nostream` |
+| `npm run db:push` quer apagar tabelas alheias | Banco compartilhado com outro projeto | NUNCA confirmar; abortar com `No, abort` |
+
 ## Próximas fases (PRD)
 
 - [ ] UX_SPECS.md (design hi-fi)
