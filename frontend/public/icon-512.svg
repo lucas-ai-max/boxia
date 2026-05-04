@@ -1,5 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="100" fill="#FAFAF7"/>
-  <text x="256" y="312" text-anchor="middle" font-family="Georgia, serif" font-size="170" font-weight="700" fill="#1a1a1a">Box</text>
-  <text x="256" y="312" text-anchor="middle" font-family="Georgia, serif" font-size="170" font-weight="700" fill="#FF6B4A" dx="120">IA</text>
+  <rect width="512" height="512" rx="100" fill="#FF6B4A"/>
+  <svg x="128" y="128" width="256" height="256" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 8L12 3 3 8v8l9 5 9-5z"/>
+    <path d="M3 8l9 5 9-5M12 13v8"/>
+  </svg>
 </svg>

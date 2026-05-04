@@ -1,5 +1,5 @@
 // BoxIA service worker — cache estático leve para casca PWA.
-const CACHE = 'boxia-v3';
+const CACHE = 'boxia-v4';
 const ASSETS = ['/', '/manifest.webmanifest', '/icon-192.svg', '/icon-512.svg'];
 
 self.addEventListener('install', (event) => {

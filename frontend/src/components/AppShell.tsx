@@ -95,31 +95,28 @@ export function BoxLogo({ size = 22, mark = true }: { size?: number; mark?: bool
       style={{ fontSize: size, letterSpacing: '-0.005em', gap: size * 0.32 }}
     >
       {mark && (
-        <span
+        // Espelha public/favicon.svg pixel a pixel — mesmo viewBox/cores/posições.
+        <svg
           aria-hidden
-          className="inline-flex items-center justify-center flex-shrink-0"
-          style={{
-            width: markSize,
-            height: markSize,
-            background: 'var(--color-brand)',
-            color: '#fff',
-            borderRadius: markSize * 0.28,
-          }}
+          viewBox="0 0 32 32"
+          width={markSize}
+          height={markSize}
+          style={{ display: 'block', flexShrink: 0 }}
         >
-          <svg
-            viewBox="0 0 24 24"
-            width={markSize * 0.62}
-            height={markSize * 0.62}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <rect width="32" height="32" rx="7" fill="#FAF8F2" />
+          <text
+            x="16"
+            y="22"
+            textAnchor="middle"
+            fontFamily="-apple-system, system-ui, sans-serif"
+            fontSize="14"
+            fontWeight="800"
+            fill="#15130F"
           >
-            <path d="M21 8L12 3 3 8v8l9 5 9-5z" />
-            <path d="M3 8l9 5 9-5M12 13v8" />
-          </svg>
-        </span>
+            B
+          </text>
+          <circle cx="24" cy="9" r="3" fill="#FF6B4A" />
+        </svg>
       )}
       <span className="inline-flex items-baseline">
         <span>Box</span>
