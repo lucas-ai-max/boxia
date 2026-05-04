@@ -20,11 +20,8 @@ const vector = (dim: number) =>
 export const sourceTypeEnum = pgEnum('boxia_source_type', ['video', 'prints']);
 export const qaSourceEnum = pgEnum('boxia_qa_source', ['print', 'video', 'manual', 'auto_import']);
 export const sessionStatusEnum = pgEnum('boxia_session_status', ['queued', 'processing', 'ready', 'failed']);
-export const feedbackActionEnum = pgEnum('boxia_feedback_action', ['like', 'edit', 'discard', 'copy']);
-export const caixinhaCategoryEnum = pgEnum('boxia_caixinha_category', [
-  'duvida-produto', 'pedido-conteudo', 'elogio', 'feedback-construtivo',
-  'oportunidade-lead', 'pergunta-pessoal', 'ruido', 'sensivel',
-]);
+export const feedbackActionEnum = pgEnum('boxia_feedback_action', ['like', 'edit', 'discard', 'copy', 'approve']);
+// Categorias e flags são definidas pelo próprio user (tabelas user_categories / user_flags).
 
 export const users = pgTable('boxia_users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -52,7 +49,7 @@ export const historicalQa = pgTable('boxia_historical_qa', {
   question: text('question').notNull(),
   answer: text('answer').notNull(),
   source: qaSourceEnum('source').notNull(),
-  category: caixinhaCategoryEnum('category'),
+  category: text('category'),
   toneTags: jsonb('tone_tags').$type<string[]>().default([]).notNull(),
   lengthClass: text('length_class'),
   embedding: vector(768)('embedding'),
@@ -93,8 +90,9 @@ export const caixinhas = pgTable('boxia_caixinhas', {
   printIndex: integer('print_index'),
   confidence: real('confidence').default(0.9),
   score: integer('score').default(0).notNull(),
-  category: caixinhaCategoryEnum('category').default('duvida-produto').notNull(),
-  flags: jsonb('flags').$type<{ urgente?: boolean; sensivel?: boolean; repetida?: boolean }>().default({}).notNull(),
+  category: text('category'),
+  // flags: { [slug]: true } — slugs definidos pelo user em boxia_user_flags.
+  flags: jsonb('flags').$type<Record<string, boolean>>().default({}).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   sessionIdx: index('boxia_caixinhas_session_idx').on(t.sessionId),
@@ -111,12 +109,48 @@ export const generations = pgTable('boxia_generations', {
   caixinhaIdx: index('boxia_gen_caixinha_idx').on(t.caixinhaId),
 }));
 
+export const clickupIntegrations = pgTable('boxia_clickup_integrations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  accessToken: text('access_token').notNull(),
+  defaultWorkspaceId: text('default_workspace_id'),
+  defaultWorkspaceName: text('default_workspace_name'),
+  defaultSpaceId: text('default_space_id'),
+  defaultListId: text('default_list_id'),
+  defaultListName: text('default_list_name'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const userCategories = pgTable('boxia_user_categories', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  slug: text('slug').notNull(),
+  label: text('label').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  userIdx: index('boxia_user_categories_user_idx').on(t.userId),
+}));
+
+export const userFlags = pgTable('boxia_user_flags', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  slug: text('slug').notNull(),
+  label: text('label').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  userIdx: index('boxia_user_flags_user_idx').on(t.userId),
+}));
+
 export const feedback = pgTable('boxia_feedback', {
   id: uuid('id').defaultRandom().primaryKey(),
   generationId: uuid('generation_id').notNull().references(() => generations.id, { onDelete: 'cascade' }),
   suggestionIndex: integer('suggestion_index').notNull(),
   action: feedbackActionEnum('action').notNull(),
   finalText: text('final_text'),
+  clickupTaskUrl: text('clickup_task_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   genIdx: index('boxia_fb_gen_idx').on(t.generationId),

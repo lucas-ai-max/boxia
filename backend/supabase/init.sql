@@ -25,7 +25,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type boxia_feedback_action as enum ('like', 'edit', 'discard', 'copy');
+  create type boxia_feedback_action as enum ('like', 'edit', 'discard', 'copy', 'approve');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -130,9 +130,24 @@ create table if not exists boxia_feedback (
   suggestion_index  integer not null,
   action            boxia_feedback_action not null,
   final_text        text,
+  clickup_task_url  text,
   created_at        timestamptz not null default now()
 );
 create index if not exists boxia_fb_gen_idx on boxia_feedback(generation_id);
+
+-- 3.8 Integração ClickUp (OAuth + lista padrão pra criar tasks ao aprovar)
+create table if not exists boxia_clickup_integrations (
+  id                       uuid primary key default gen_random_uuid(),
+  user_id                  uuid not null unique references boxia_users(id) on delete cascade,
+  access_token             text not null,
+  default_workspace_id     text,
+  default_workspace_name   text,
+  default_space_id         text,
+  default_list_id          text,
+  default_list_name        text,
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
 
 -- ── 4. RLS (Row-Level Security) — defesa em profundidade ────────────────────
 -- Como o app usa JWT próprio (não Supabase Auth), o backend acessa o banco
@@ -141,13 +156,14 @@ create index if not exists boxia_fb_gen_idx on boxia_feedback(generation_id);
 -- Supabase, garantindo que ninguém consiga ler dados de outros tenants pela
 -- API REST automática do Supabase.
 
-alter table boxia_users          enable row level security;
-alter table boxia_brand_dna      enable row level security;
-alter table boxia_historical_qa  enable row level security;
-alter table boxia_sessions       enable row level security;
-alter table boxia_caixinhas      enable row level security;
-alter table boxia_generations    enable row level security;
-alter table boxia_feedback       enable row level security;
+alter table boxia_users                  enable row level security;
+alter table boxia_brand_dna              enable row level security;
+alter table boxia_historical_qa          enable row level security;
+alter table boxia_sessions               enable row level security;
+alter table boxia_caixinhas              enable row level security;
+alter table boxia_generations            enable row level security;
+alter table boxia_feedback               enable row level security;
+alter table boxia_clickup_integrations   enable row level security;
 
 -- Sem políticas = ninguém via PostgREST consegue ler/escrever.
 -- O backend usa service_role (bypass RLS) — única forma de acessar.

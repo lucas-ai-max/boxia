@@ -17,7 +17,7 @@ export async function addToRag(input: {
     question: input.question,
     answer: input.answer,
     source: input.source,
-    category: input.category as never,
+    category: input.category ?? null,
     embedding,
     lengthClass,
     autoImported: input.source === 'auto_import',

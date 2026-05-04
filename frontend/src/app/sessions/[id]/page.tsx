@@ -6,34 +6,14 @@ import { AppShell, PageHeader } from '@/components/AppShell';
 import { Button, Card, Badge, Chip, ScoreRing, Textarea } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { api, type Caixinha, type Session } from '@/lib/api';
+import { useTaxonomy } from '@/lib/taxonomy';
 
-type Filter = 'todas' | 'urgentes' | 'categoria' | 'ruido';
-
-const CATEGORY_LABEL: Record<string, string> = {
-  'duvida-produto': 'dúvida sobre produto',
-  'pedido-conteudo': 'pediu conteúdo',
-  'elogio': 'elogio',
-  'feedback-construtivo': 'feedback',
-  'oportunidade-lead': 'lead em potencial',
-  'pergunta-pessoal': 'pergunta pessoal',
-  'ruido': 'sem prioridade',
-  'sensivel': 'cuidado',
-};
-
-const CATEGORY_TONE: Record<string, 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
-  'oportunidade-lead': 'brand',
-  'duvida-produto': 'info',
-  'pedido-conteudo': 'success',
-  'sensivel': 'danger',
-  'feedback-construtivo': 'warning',
-  'elogio': 'neutral',
-  'ruido': 'neutral',
-  'pergunta-pessoal': 'neutral',
-};
+type Filter = 'todas' | 'categoria';
 
 export default function SessionResultPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const taxonomy = useTaxonomy();
   const [session, setSession] = useState<Session | null>(null);
   const [items, setItems] = useState<Caixinha[]>([]);
   const [filter, setFilter] = useState<Filter>('todas');
@@ -48,15 +28,13 @@ export default function SessionResultPage({ params }: { params: Promise<{ id: st
 
   const counts = useMemo(() => ({
     total: items.length,
-    urgentes: items.filter((c) => c.flags.urgente).length,
-    ruido: items.filter((c) => c.category === 'ruido').length,
   }), [items]);
 
   const visible = useMemo(() => {
-    if (filter === 'urgentes') return items.filter((c) => c.flags.urgente);
-    if (filter === 'ruido') return items.filter((c) => c.category === 'ruido');
-    if (filter === 'categoria') return [...items].sort((a, b) => a.category.localeCompare(b.category));
-    return items.filter((c) => c.category !== 'ruido');
+    if (filter === 'categoria') {
+      return [...items].sort((a, b) => (a.category ?? '').localeCompare(b.category ?? ''));
+    }
+    return items;
   }, [items, filter]);
 
   if (session?.historical) return <HistoricalReview session={session} items={items} />;
@@ -102,21 +80,11 @@ export default function SessionResultPage({ params }: { params: Promise<{ id: st
 
       <div className="px-5 pb-3 flex gap-1.5 overflow-x-auto no-scrollbar">
         <Chip active={filter === 'todas'} onClick={() => setFilter('todas')}>
-          Todas <span className="opacity-60 ml-1">{counts.total - counts.ruido}</span>
+          Todas <span className="opacity-60 ml-1">{counts.total}</span>
         </Chip>
-        {counts.urgentes > 0 && (
-          <Chip active={filter === 'urgentes'} onClick={() => setFilter('urgentes')}>
-            ⚡ Urgentes <span className="opacity-60 ml-1">{counts.urgentes}</span>
-          </Chip>
-        )}
         <Chip active={filter === 'categoria'} onClick={() => setFilter('categoria')}>
           Por tipo
         </Chip>
-        {counts.ruido > 0 && (
-          <Chip active={filter === 'ruido'} onClick={() => setFilter('ruido')}>
-            Sem prioridade <span className="opacity-60 ml-1">{counts.ruido}</span>
-          </Chip>
-        )}
       </div>
 
       <div className="flex-1 px-5 pb-5 overflow-y-auto app-scroll flex flex-col gap-2.5">
@@ -133,11 +101,14 @@ export default function SessionResultPage({ params }: { params: Promise<{ id: st
               <ScoreRing score={c.score} size={42} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                  <Badge tone={CATEGORY_TONE[c.category] ?? 'neutral'}>
-                    {CATEGORY_LABEL[c.category] ?? c.category}
-                  </Badge>
-                  {c.flags.urgente && <Badge tone="brand">⚡ urgente</Badge>}
-                  {c.flags.sensivel && <Badge tone="danger">⚠ delicada</Badge>}
+                  {c.category && (
+                    <Badge tone="neutral">{taxonomy.categoryLabel(c.category)}</Badge>
+                  )}
+                  {Object.entries(c.flags)
+                    .filter(([, v]) => v)
+                    .map(([slug]) => (
+                      <Badge key={slug} tone="brand">{taxonomy.flagLabel(slug)}</Badge>
+                    ))}
                 </div>
                 {c.autorNome && (
                   <div className="text-[12px] font-semibold text-[color:var(--color-ink-2)] mb-0.5 truncate">
@@ -148,7 +119,18 @@ export default function SessionResultPage({ params }: { params: Promise<{ id: st
                   "{c.pergunta}"
                 </p>
               </div>
-              <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)] mt-1.5 flex-shrink-0" />
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                {c.approval && (
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: 'var(--color-success)', color: 'white' }}
+                    title="Enviada pro ClickUp"
+                  >
+                    <Icon.Check width={11} height={11} strokeWidth={3} />
+                  </div>
+                )}
+                <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)] mt-0.5" />
+              </div>
             </Card>
           </Link>
         ))}

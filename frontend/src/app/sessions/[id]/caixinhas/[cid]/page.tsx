@@ -1,25 +1,22 @@
 'use client';
-import { useEffect, useState, use } from 'react';
+import { useEffect, useRef, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { Button, Card, Badge, Chip, ScoreRing } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { api, type Caixinha, type Generation, type Session } from '@/lib/api';
+import { useTaxonomy } from '@/lib/taxonomy';
+
+type Approval = {
+  at: string;
+  suggestionIndex: number;
+  taskUrl: string | null;
+};
 
 type GenResponse = {
   generation: Generation;
   inspiredBy: { id: string; question: string; answer: string }[];
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  'duvida-produto': 'dúvida sobre produto',
-  'pedido-conteudo': 'pediu conteúdo',
-  'elogio': 'elogio',
-  'feedback-construtivo': 'feedback',
-  'oportunidade-lead': 'lead em potencial',
-  'pergunta-pessoal': 'pergunta pessoal',
-  'ruido': 'sem prioridade',
-  'sensivel': 'cuidado',
+  approval?: Approval | null;
 };
 
 const REGEN_OPTIONS = [
@@ -29,6 +26,7 @@ const REGEN_OPTIONS = [
 export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: string; cid: string }> }) {
   const { id, cid } = use(params);
   const router = useRouter();
+  const taxonomy = useTaxonomy();
   const [caixinha, setCaixinha] = useState<Caixinha | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [siblings, setSiblings] = useState<Caixinha[]>([]);
@@ -39,6 +37,15 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
   const [showInspired, setShowInspired] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const editingRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Faz o textarea crescer com o conteúdo (sem barra de scroll interna)
+  useEffect(() => {
+    const el = editingRef.current;
+    if (!el || editing === null) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [editing]);
 
   useEffect(() => {
     api.get<{ session: Session; caixinhas: Caixinha[] }>(`/sessions/${id}`).then((r) => {
@@ -74,23 +81,40 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
     } finally { setGenerating(false); }
   }
 
-  async function feedback(action: 'like' | 'edit' | 'discard' | 'copy', finalText?: string) {
+  async function feedback(action: 'like' | 'edit' | 'discard' | 'approve', finalText?: string) {
     if (!data) return;
     try {
-      await api.post('/feedback', {
+      const r = await api.post<{ clickupTaskUrl?: string; createdAt?: string }>('/feedback', {
         generationId: data.generation.id,
         suggestionIndex: active,
         action,
         finalText,
       });
-      if (action === 'copy' && finalText) {
-        try { await navigator.clipboard.writeText(finalText); } catch {}
+      if (action === 'approve') {
         navigator.vibrate?.(20);
-        showToast('Copiada!');
+        showToast('Aprovada ✓');
+        // Atualiza estado local pra o badge "Aprovada" aparecer sem precisar recarregar.
+        setData((prev) => prev ? {
+          ...prev,
+          approval: {
+            at: r.createdAt ?? new Date().toISOString(),
+            suggestionIndex: active,
+            taskUrl: r.clickupTaskUrl ?? null,
+          },
+        } : prev);
       } else if (action === 'like') showToast('Anotado — vou usar mais isso 👍');
       else if (action === 'discard') showToast('Não vou usar de novo');
       else if (action === 'edit') showToast('Sua versão foi salva');
-    } catch {}
+    } catch (e) {
+      const msg = (e as Error).message || '';
+      if (msg.includes('clickup_not_configured')) {
+        showToast('Conecte o ClickUp em Ajustes →');
+      } else if (msg.includes('clickup_disconnected')) {
+        showToast('ClickUp desconectado — reconecte em Ajustes');
+      } else if (action === 'approve') {
+        showToast('Falhou — tenta de novo');
+      }
+    }
   }
 
   function showToast(msg: string) {
@@ -120,7 +144,7 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
         back
         onBack={() => router.push(`/sessions/${id}`)}
         title={`Caixinha ${idx + 1}/${siblings.length}`}
-        subtitle={CATEGORY_LABEL[caixinha.category] ?? caixinha.category}
+        subtitle={caixinha.category ? taxonomy.categoryLabel(caixinha.category) : undefined}
       />
 
       <div className="px-5 pb-4 flex flex-col gap-2.5">
@@ -141,10 +165,13 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
             style={{ background: 'var(--color-brand)' }}
           />
           <div className="relative">
-            <div className="flex items-center gap-2 mb-2.5">
+            <div className="flex items-center gap-2 mb-2.5 flex-wrap">
               <ScoreRing score={caixinha.score} size={32} />
-              {caixinha.flags.urgente && <Badge tone="brand">⚡ urgente</Badge>}
-              {caixinha.flags.sensivel && <Badge tone="danger">⚠ delicada</Badge>}
+              {Object.entries(caixinha.flags)
+                .filter(([, v]) => v)
+                .map(([slug]) => (
+                  <Badge key={slug} tone="brand">{taxonomy.flagLabel(slug)}</Badge>
+                ))}
             </div>
             {caixinha.autorNome && (
               <div className="text-[13px] font-semibold text-[color:var(--color-ink-2)] mb-1">
@@ -193,23 +220,83 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
           </Card>
         )}
 
+        {!generating && data?.approval && (
+          <Card padded={false} className="p-3 flex items-center gap-2.5" style={{
+            background: 'var(--color-success-soft)',
+            borderColor: 'var(--color-success)',
+          }}>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                 style={{ background: 'var(--color-success)', color: 'white' }}>
+              <Icon.Check width={16} height={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold" style={{ color: 'var(--color-success)' }}>
+                Aprovada e enviada pro ClickUp
+              </div>
+              <div className="text-[11px] text-[color:var(--color-muted)]">
+                {new Date(data.approval.at).toLocaleString('pt-BR')}
+              </div>
+            </div>
+            {data.approval.taskUrl && (
+              <a
+                href={data.approval.taskUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12px] font-medium underline flex-shrink-0"
+                style={{ color: 'var(--color-success)' }}
+              >
+                Ver no ClickUp →
+              </a>
+            )}
+          </Card>
+        )}
+
         {!generating && !genError && suggestions[active] !== undefined && (
           <Card padded className="border-2" style={{ borderColor: 'var(--color-brand)' }}>
             {editing !== null ? (
-              <textarea
-                value={editing}
-                onChange={(e) => setEditing(e.target.value)}
-                className="w-full text-[15px] leading-relaxed bg-transparent border-none outline-none resize-none font-[family-name:var(--font-body)]"
-                style={{ minHeight: 100 }}
-                autoFocus
-              />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold"
+                       style={{ color: 'var(--color-brand-strong)' }}>
+                    ✎ editando
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      onClick={() => setEditing('')}
+                      className="text-[color:var(--color-muted)] hover:text-[color:var(--color-ink-2)] underline"
+                    >
+                      limpar
+                    </button>
+                    <span className="text-[color:var(--color-muted-2)]">·</span>
+                    <button
+                      onClick={() => setEditing(null)}
+                      className="text-[color:var(--color-muted)] hover:text-[color:var(--color-ink-2)] underline"
+                    >
+                      cancelar
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  ref={editingRef}
+                  value={editing}
+                  onChange={(e) => setEditing(e.target.value)}
+                  placeholder="Escreva sua resposta do zero ou ajuste a sugestão..."
+                  className="w-full text-[16px] leading-relaxed bg-transparent border-none outline-none resize-none font-[family-name:var(--font-body)] placeholder:text-[color:var(--color-muted-2)]"
+                  style={{ minHeight: 180 }}
+                  autoFocus
+                />
+                <div className="mt-2 pt-2 border-t border-[color:var(--color-line)] flex items-center justify-between text-[11px] text-[color:var(--color-muted-2)]">
+                  <span>toque ✓ pra salvar · ou Aprovar pra mandar pro ClickUp</span>
+                  <span className="tabular-nums">{editing.length} caracteres</span>
+                </div>
+              </div>
             ) : (
               <p className="text-[15px] leading-relaxed text-[color:var(--color-ink)]">
                 {suggestions[active]}
               </p>
             )}
 
-            {data?.inspiredBy && data.inspiredBy.length > 0 && (
+            {editing === null && data?.inspiredBy && data.inspiredBy.length > 0 && (
               <div className="mt-3 pt-3 border-t border-[color:var(--color-line)]">
                 <button
                   onClick={() => setShowInspired((s) => !s)}
@@ -250,8 +337,8 @@ export default function CaixinhaDetailPage({ params }: { params: Promise<{ id: s
                 title={editing === null ? 'editar' : 'salvar edição'}
               />
               <FeedbackBtn icon={<Icon.Trash width={16} height={16} />} onClick={() => feedback('discard')} danger title="descartar" />
-              <Button variant="primary" size="md" full onClick={() => feedback('copy', current)} className="flex-1">
-                <Icon.Copy width={16} height={16} /> Copiar
+              <Button variant="primary" size="md" full onClick={() => feedback('approve', current)} className="flex-1">
+                <Icon.Check width={16} height={16} /> {data?.approval ? 'Reaprovar' : 'Aprovar'}
               </Button>
             </div>
 

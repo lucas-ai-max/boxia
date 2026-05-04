@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { sessions, caixinhas } from '../db/schema.js';
+import { sessions, caixinhas, generations, feedback } from '../db/schema.js';
 import { requireAuth } from '../lib/auth.js';
 import { storage } from '../lib/storage.js';
 import { sessionBus } from '../lib/events.js';
@@ -74,7 +74,39 @@ sessionsRouter.get('/:id', async (req, res) => {
     where: eq(caixinhas.sessionId, id),
     orderBy: [desc(caixinhas.score)],
   });
-  res.json({ session, caixinhas: items });
+
+  // Enriquece cada caixinha com a aprovação mais recente (se tiver), pra UI exibir
+  // badge "✓ ClickUp" na lista. Duas queries pequenas e um map em memória.
+  const itemIds = items.map((c) => c.id);
+  let approvalByCaixinha = new Map<string, { at: string; taskUrl: string | null }>();
+  if (itemIds.length) {
+    const gens = await db.select({ id: generations.id, caixinhaId: generations.caixinhaId })
+      .from(generations)
+      .where(inArray(generations.caixinhaId, itemIds));
+    const genIds = gens.map((g) => g.id);
+    if (genIds.length) {
+      const fbs = await db.select({
+        generationId: feedback.generationId,
+        createdAt: feedback.createdAt,
+        taskUrl: feedback.clickupTaskUrl,
+      })
+        .from(feedback)
+        .where(and(inArray(feedback.generationId, genIds), eq(feedback.action, 'approve')))
+        .orderBy(desc(feedback.createdAt));
+      const genToCx = new Map(gens.map((g) => [g.id, g.caixinhaId]));
+      for (const fb of fbs) {
+        const cxId = genToCx.get(fb.generationId);
+        if (!cxId || approvalByCaixinha.has(cxId)) continue; // mantém só a mais recente
+        approvalByCaixinha.set(cxId, { at: fb.createdAt.toISOString(), taskUrl: fb.taskUrl });
+      }
+    }
+  }
+
+  const enriched = items.map((c) => ({
+    ...c,
+    approval: approvalByCaixinha.get(c.id) ?? null,
+  }));
+  res.json({ session, caixinhas: enriched });
 });
 
 sessionsRouter.delete('/:id', async (req, res) => {

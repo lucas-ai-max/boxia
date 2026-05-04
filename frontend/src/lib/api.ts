@@ -40,6 +40,12 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     });
   },
+  patch<T>(p: string, body?: unknown) {
+    return this.request<T>(p, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  },
   del<T>(p: string) { return this.request<T>(p, { method: 'DELETE' }); },
 };
 
@@ -65,8 +71,27 @@ export type Caixinha = {
   printIndex: number | null;
   confidence: number;
   score: number;
-  category: string;
-  flags: { urgente?: boolean; sensivel?: boolean; repetida?: boolean };
+  // slug da categoria do user, ou null se ele ainda não definiu nenhuma.
+  category: string | null;
+  // chaves são slugs definidos em /flags pelo próprio user.
+  flags: Record<string, boolean>;
+  approval?: { at: string; taskUrl: string | null } | null;
+};
+
+export type UserCategory = {
+  id: string;
+  slug: string;
+  label: string;
+  description: string | null;
+  createdAt: string;
+};
+
+export type UserFlag = {
+  id: string;
+  slug: string;
+  label: string;
+  description: string | null;
+  createdAt: string;
 };
 
 export type Generation = {

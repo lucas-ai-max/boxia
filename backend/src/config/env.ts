@@ -22,6 +22,17 @@ const schema = z.object({
   MAX_VIDEO_MB: z.coerce.number().default(500),
   MAX_VIDEO_MINUTES: z.coerce.number().default(15),
   MAX_PRINTS_PER_BATCH: z.coerce.number().default(50),
+
+  CLICKUP_CLIENT_ID: z.string().default(''),
+  CLICKUP_CLIENT_SECRET: z.string().default(''),
+  CLICKUP_REDIRECT_URI: z.string().default('http://localhost:3333/clickup/oauth/callback'),
+  // Default global: se setados, todo user sem integração própria já tem ClickUp
+  // "conectado" e os approves caem nesta lista. Use Personal API Token do dono
+  // (Settings → Apps → Generate) — não precisa OAuth pra esse fluxo.
+  CLICKUP_DEFAULT_TOKEN: z.string().default(''),
+  CLICKUP_DEFAULT_LIST_ID: z.string().default(''),
+  CLICKUP_DEFAULT_LIST_NAME: z.string().default('Lista padrão'),
+  FRONTEND_URL: z.string().default('http://localhost:3000'),
 });
 
 export const env = schema.parse(process.env);

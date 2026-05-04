@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "seed:clickup-list": "tsx src/scripts/set-clickup-default-for-all.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

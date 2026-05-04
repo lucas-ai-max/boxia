@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { sessions, caixinhas, brandDna } from '../db/schema.js';
+import { sessions, caixinhas, brandDna, userCategories, userFlags } from '../db/schema.js';
 import { storage } from '../lib/storage.js';
 import { sessionBus } from '../lib/events.js';
 import { llm } from '../services/gemini-provider.js';
@@ -44,7 +44,7 @@ export async function processSession(sessionId: string, userId: string, files: {
           printIndex: c.printIndex ?? idx,
           confidence: c.confidence,
           score: 0,
-          category: 'pergunta-pessoal' as const,
+          category: null,
         })),
       ).returning();
       await db.update(sessions).set({
@@ -62,9 +62,22 @@ export async function processSession(sessionId: string, userId: string, files: {
     });
     const dnaText = dnaRow?.contentText ?? '';
 
+    // Categorias e flags definidas pelo próprio user. Se nenhuma, classify() devolve nulls
+    // sem chamar a IA (economiza token e respeita "user ainda não configurou").
+    const [userCats, userFlagDefs] = await Promise.all([
+      db.select().from(userCategories).where(eq(userCategories.userId, userId)).orderBy(asc(userCategories.createdAt)),
+      db.select().from(userFlags).where(eq(userFlags.userId, userId)).orderBy(asc(userFlags.createdAt)),
+    ]);
+
     const classified = await Promise.all(
       extraction.caixinhas.map(async (c) => {
-        const cls = await llm.classify({ brandDna: dnaText, pergunta: c.pergunta, contextoVisual: c.contextoVisual });
+        const cls = await llm.classify({
+          brandDna: dnaText,
+          pergunta: c.pergunta,
+          contextoVisual: c.contextoVisual,
+          categories: userCats.map((u) => ({ slug: u.slug, label: u.label, description: u.description })),
+          flags: userFlagDefs.map((u) => ({ slug: u.slug, label: u.label, description: u.description })),
+        });
         return { c, cls };
       }),
     );

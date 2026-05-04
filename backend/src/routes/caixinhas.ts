@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { caixinhas, sessions, brandDna, generations, historicalQa } from '../db/schema.js';
+import { caixinhas, sessions, brandDna, generations, historicalQa, feedback } from '../db/schema.js';
 import { requireAuth } from '../lib/auth.js';
 import { llm } from '../services/gemini-provider.js';
 import { recentApprovedTexts, searchRag } from '../services/rag.js';
@@ -34,7 +34,18 @@ caixinhasRouter.get('/:id/generation', async (req, res) => {
         .where(and(eq(historicalQa.userId, userId), inArray(historicalQa.id, ragIds)))
     : [];
 
-  res.json({ generation, inspiredBy });
+  // Última aprovação dessa generation (pra UI mostrar badge "Aprovada ✓").
+  const approvalRow = await db.query.feedback.findFirst({
+    where: and(eq(feedback.generationId, generation.id), eq(feedback.action, 'approve')),
+    orderBy: [desc(feedback.createdAt)],
+  });
+  const approval = approvalRow ? {
+    at: approvalRow.createdAt,
+    suggestionIndex: approvalRow.suggestionIndex,
+    taskUrl: approvalRow.clickupTaskUrl,
+  } : null;
+
+  res.json({ generation, inspiredBy, approval });
 });
 
 caixinhasRouter.post('/:id/generate', async (req, res) => {

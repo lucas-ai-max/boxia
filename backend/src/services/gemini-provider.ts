@@ -3,7 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { FileState, GoogleGenAI, Type, createPartFromUri } from '@google/genai';
 import { env } from '../config/env.js';
 import type {
-  ClassifiedCaixinha, ExtractionResult, GenerationContext, LLMProvider,
+  ClassifiedCaixinha, ClassifyInput, ExtractionResult, GenerationContext, LLMProvider,
 } from './llm-provider.js';
 
 export class GeminiProvider implements LLMProvider {
@@ -115,26 +115,46 @@ export class GeminiProvider implements LLMProvider {
     }
   }
 
-  async classify(input: { brandDna: string; pergunta: string; contextoVisual?: string }): Promise<ClassifiedCaixinha> {
+  async classify(input: ClassifyInput): Promise<ClassifiedCaixinha> {
     const client = this.ensureClient();
+
+    // Sem categorias E sem flags = nada pra IA escolher; pula a chamada.
+    if (input.categories.length === 0 && input.flags.length === 0) {
+      return { score: 50, category: null, flags: {} };
+    }
+
+    const categorySlugs = input.categories.map((c) => c.slug);
+    const flagSlugs = input.flags.map((f) => f.slug);
+    const prompt = buildClassifyPrompt(input);
+
     const res = await client.models.generateContent({
       model: env.GEMINI_MODEL,
-      contents: [{
-        role: 'user',
-        parts: [{
-          text: `${CLASSIFY_PROMPT}\n\nTom de voz do criador:\n${input.brandDna || '(não fornecido)'}\n\nCaixinha:\n"${input.pergunta}"\nContexto: ${input.contextoVisual ?? ''}`,
-        }],
-      }],
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: 'application/json',
-        responseSchema: classifySchema(),
+        responseSchema: classifySchema(categorySlugs, flagSlugs) as never,
       },
     });
     try {
-      return JSON.parse(res.text ?? '{}');
+      const obj = JSON.parse(res.text ?? '{}');
+      const categorySet = new Set(categorySlugs);
+      const flagSet = new Set(flagSlugs);
+      // Garante que IA não inventou slugs que não existem no catálogo do user.
+      const category = typeof obj.category === 'string' && categorySet.has(obj.category)
+        ? obj.category
+        : (categorySlugs[0] ?? null);
+      const flags: Record<string, boolean> = {};
+      if (obj.flags && typeof obj.flags === 'object') {
+        for (const slug of flagSlugs) {
+          if (obj.flags[slug] === true) flags[slug] = true;
+        }
+        // ignora qualquer chave que IA inventou fora do flagSet
+        void flagSet;
+      }
+      const score = typeof obj.score === 'number' ? Math.max(0, Math.min(100, Math.round(obj.score))) : 50;
+      return { score, category, flags };
     } catch {
-      // fallback mínimo se a IA quebrar o schema — sem inventar score
-      return { score: 50, category: 'pergunta-pessoal', flags: {} };
+      return { score: 50, category: categorySlugs[0] ?? null, flags: {} };
     }
   }
 
@@ -216,7 +236,7 @@ function composePrompt(ctx: GenerationContext): string {
   } else {
     lines.push(`Mensagem do seguidor: "${ctx.pergunta}"`);
   }
-  lines.push(`Tipo: ${ctx.category}`);
+  if (ctx.category) lines.push(`Tipo: ${ctx.category}`);
   if (ctx.modifier) lines.push(`### Ajuste pedido\n${ctx.modifier}`);
   lines.push('');
   lines.push('Gere 2 a 3 sugestões DIFERENTES (variando estilo e tamanho). Retorne JSON: { "suggestions": ["...", "...", "..."] }.');
@@ -250,12 +270,38 @@ const HISTORICAL_EXTRACT_PROMPT =
   `Retorne JSON: { "pairs": [{ "question": "...", "answer": "..." }, ...] }. ` +
   `Se um print não tiver resposta visível, omita-o.`;
 
-const CLASSIFY_PROMPT =
-  `Classifique a caixinha. Retorne JSON com: ` +
-  `score (0-100, importância pra responder), ` +
-  `category (duvida-produto|pedido-conteudo|elogio|feedback-construtivo|oportunidade-lead|pergunta-pessoal|ruido|sensivel), ` +
-  `flags { urgente, sensivel, repetida }. ` +
-  `Critérios: alinhamento com o tom de voz, potencial de engajamento, especificidade. Marque "sensivel" para temas delicados.`;
+function buildClassifyPrompt(input: ClassifyInput): string {
+  const lines: string[] = [];
+  lines.push(`Você está classificando uma caixinha de pergunta do Instagram pra ajudar o criador a priorizar respostas.`);
+  lines.push(``);
+  lines.push(`Tom de voz do criador:\n${input.brandDna || '(não fornecido)'}`);
+  lines.push(``);
+  lines.push(`Caixinha:\n"${input.pergunta}"`);
+  if (input.contextoVisual) lines.push(`Contexto visual: ${input.contextoVisual}`);
+  lines.push(``);
+
+  if (input.categories.length > 0) {
+    lines.push(`### Categorias (escolha EXATAMENTE UMA — use o slug)`);
+    for (const c of input.categories) {
+      const desc = c.description ? ` — ${c.description}` : '';
+      lines.push(`- "${c.slug}" (${c.label})${desc}`);
+    }
+  }
+  if (input.flags.length > 0) {
+    lines.push(``);
+    lines.push(`### Flags (marque true só pras que se aplicam — pode ser nenhuma, uma ou várias)`);
+    for (const f of input.flags) {
+      const desc = f.description ? ` — ${f.description}` : '';
+      lines.push(`- "${f.slug}" (${f.label})${desc}`);
+    }
+  }
+  lines.push(``);
+  lines.push(`Retorne JSON com: score (0-100, importância pra responder)`);
+  if (input.categories.length > 0) lines.push(`+ category (slug exato da lista acima)`);
+  if (input.flags.length > 0) lines.push(`+ flags (objeto { "slug": true } só pras flags que se aplicam)`);
+  lines.push(`Critérios pro score: alinhamento com o tom, potencial de engajamento, especificidade.`);
+  return lines.join('\n');
+}
 
 function extractionSchema() {
   return {
@@ -282,22 +328,32 @@ function extractionSchema() {
   };
 }
 
-function classifySchema() {
+function classifySchema(categorySlugs: string[], flagSlugs: string[]) {
+  const properties: Record<string, unknown> = {
+    score: { type: Type.INTEGER },
+  };
+  const required: string[] = ['score'];
+
+  if (categorySlugs.length > 0) {
+    properties.category = { type: Type.STRING, enum: categorySlugs };
+    required.push('category');
+  }
+
+  if (flagSlugs.length > 0) {
+    const flagProps: Record<string, unknown> = {};
+    for (const slug of flagSlugs) {
+      flagProps[slug] = { type: Type.BOOLEAN };
+    }
+    properties.flags = {
+      type: Type.OBJECT,
+      properties: flagProps,
+    };
+  }
+
   return {
     type: Type.OBJECT,
-    properties: {
-      score: { type: Type.INTEGER },
-      category: { type: Type.STRING },
-      flags: {
-        type: Type.OBJECT,
-        properties: {
-          urgente: { type: Type.BOOLEAN },
-          sensivel: { type: Type.BOOLEAN },
-          repetida: { type: Type.BOOLEAN },
-        },
-      },
-    },
-    required: ['score', 'category'],
+    properties,
+    required,
   };
 }
 

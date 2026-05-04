@@ -24,7 +24,6 @@ export const Icon = {
   Close:  (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M18 6L6 18M6 6l12 12"/></Svg>,
   Search: (p: SVGProps<SVGSVGElement>) => <Svg {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></Svg>,
   Check:  (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M20 6L9 17l-5-5"/></Svg>,
-  Copy:   (p: SVGProps<SVGSVGElement>) => <Svg {...p}><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></Svg>,
   Edit:   (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></Svg>,
   Trash:  (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></Svg>,
   ThumbUp:(p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M7 22V11M2 13v7a2 2 0 0 0 2 2h3M15 5.88L14 10h5.76a2 2 0 0 1 1.94 2.5l-2.5 9A2 2 0 0 1 17.26 23H7V11l5-9 1.74 1.74A2 2 0 0 1 14 6.66z"/></Svg>,
@@ -40,4 +39,5 @@ export const Icon = {
   Filter: (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M3 6h18M6 12h12M10 18h4"/></Svg>,
   Box:    (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M21 8L12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></Svg>,
   Logout: (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></Svg>,
+  Plug:   (p: SVGProps<SVGSVGElement>) => <Svg {...p}><path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z"/><path d="M12 16v6"/></Svg>,
 };

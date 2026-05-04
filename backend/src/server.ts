@@ -9,6 +9,9 @@ import { caixinhasRouter } from './routes/caixinhas.js';
 import { feedbackRouter } from './routes/feedback.js';
 import { libraryRouter } from './routes/library.js';
 import { metricsRouter } from './routes/metrics.js';
+import { clickupRouter } from './routes/clickup.js';
+import { categoriesRouter } from './routes/categories.js';
+import { flagsRouter } from './routes/flags.js';
 
 const app = express();
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
@@ -26,10 +29,19 @@ app.use('/caixinhas', caixinhasRouter);
 app.use('/feedback', feedbackRouter);
 app.use('/library', libraryRouter);
 app.use('/metrics', metricsRouter);
+app.use('/clickup', clickupRouter);
+app.use('/categories', categoriesRouter);
+app.use('/flags', flagsRouter);
 
 app.use((err: Error & { statusCode?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[error]', err);
   res.status(err.statusCode ?? 500).json({ error: err.message ?? 'Internal error' });
+});
+
+// Sem isto, qualquer rejection não capturada (ex.: throw em handler async sem
+// asyncHandler) derruba o processo no Node 18+. Loga e mantém o servidor vivo.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
 });
 
 async function bootstrap() {
