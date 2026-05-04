@@ -77,6 +77,24 @@ sessionsRouter.get('/:id', async (req, res) => {
   res.json({ session, caixinhas: items });
 });
 
+sessionsRouter.delete('/:id', async (req, res) => {
+  const userId = req.user!.userId;
+  const id = req.params.id!;
+  const session = await db.query.sessions.findFirst({
+    where: and(eq(sessions.id, id), eq(sessions.userId, userId)),
+  });
+  if (!session) return res.status(404).json({ error: 'Not found' });
+
+  if (session.storageRef) {
+    for (const ref of session.storageRef.split(',').map((r) => r.trim()).filter(Boolean)) {
+      await storage.delete(ref).catch(() => {});
+    }
+  }
+
+  await db.delete(sessions).where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+  res.status(204).end();
+});
+
 sessionsRouter.get('/:id/stream', async (req, res) => {
   const userId = req.user!.userId;
   const id = req.params.id!;

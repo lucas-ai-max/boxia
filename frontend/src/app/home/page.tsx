@@ -12,6 +12,7 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!api.getToken()) { router.replace('/'); return; }
@@ -22,6 +23,19 @@ export default function HomePage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [router]);
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Apagar essa sessão e todas as caixinhas dela?')) return;
+    setDeletingId(id);
+    try {
+      await api.del(`/sessions/${id}`);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      window.alert('Não foi possível apagar. Tenta de novo.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const ragTotal = metrics?.rag.total ?? 0;
   const ragHealthy = ragTotal >= 30;
@@ -107,36 +121,46 @@ export default function HomePage() {
           </Card>
         )}
         {sessions.map((s) => (
-          <Link key={s.id} href={s.status === 'ready' ? `/sessions/${s.id}` : `/sessions/${s.id}/processing`}>
-            <Card interactive padded={false} className="p-3.5 flex items-center gap-3.5">
-              <div
-                className="w-12 h-12 rounded-[14px] flex items-center justify-center font-[family-name:var(--font-display)] text-[18px] font-bold flex-shrink-0"
-                style={{
-                  background: 'var(--color-brand-soft)',
-                  color: 'var(--color-brand-strong)',
-                }}
-              >
-                {s.totalCaixinhas}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  {s.source === 'video'
-                    ? <Icon.Video width={14} height={14} />
-                    : <Icon.Image width={14} height={14} />}
-                  <span className="font-medium text-[14px] truncate">
-                    {s.source === 'video' ? 'Vídeo' : 'Prints'}
-                    {s.historical && ' · antigas'}
-                  </span>
-                  {s.status === 'processing' && <Badge tone="info">lendo...</Badge>}
-                  {s.status === 'failed' && <Badge tone="danger">erro</Badge>}
+          <div key={s.id} className="relative">
+            <Link href={s.status === 'ready' ? `/sessions/${s.id}` : `/sessions/${s.id}/processing`}>
+              <Card interactive padded={false} className="p-3.5 flex items-center gap-3.5">
+                <div
+                  className="w-12 h-12 rounded-[14px] flex items-center justify-center font-[family-name:var(--font-display)] text-[18px] font-bold flex-shrink-0"
+                  style={{
+                    background: 'var(--color-brand-soft)',
+                    color: 'var(--color-brand-strong)',
+                  }}
+                >
+                  {s.totalCaixinhas}
                 </div>
-                <div className="text-[12px] text-[color:var(--color-muted)]">
-                  {fmtDate(s.createdAt)} · {s.totalCaixinhas} caixinhas
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    {s.source === 'video'
+                      ? <Icon.Video width={14} height={14} />
+                      : <Icon.Image width={14} height={14} />}
+                    <span className="font-medium text-[14px] truncate">
+                      {s.source === 'video' ? 'Vídeo' : 'Prints'}
+                      {s.historical && ' · antigas'}
+                    </span>
+                    {s.status === 'processing' && <Badge tone="info">lendo...</Badge>}
+                    {s.status === 'failed' && <Badge tone="danger">erro</Badge>}
+                  </div>
+                  <div className="text-[12px] text-[color:var(--color-muted)]">
+                    {fmtDate(s.createdAt)} · {s.totalCaixinhas} caixinhas
+                  </div>
                 </div>
-              </div>
-              <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)]" />
-            </Card>
-          </Link>
+                <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)] mr-8" />
+              </Card>
+            </Link>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(s.id); }}
+              disabled={deletingId === s.id}
+              aria-label="Apagar sessão"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full inline-flex items-center justify-center text-[color:var(--color-muted)] hover:text-[#dc2626] hover:bg-red-50 active:scale-95 transition disabled:opacity-40"
+            >
+              <Icon.Trash width={16} height={16} />
+            </button>
+          </div>
         ))}
       </div>
     </AppShell>
