@@ -87,13 +87,44 @@ function BottomTabBar() {
   );
 }
 
-export function BoxLogo({ size = 22 }: { size?: number }) {
+export function BoxLogo({ size = 22, mark = true }: { size?: number; mark?: boolean }) {
+  const markSize = size * 1.15;
   return (
     <span
-      className="font-[family-name:var(--font-display)] font-bold tracking-tight"
-      style={{ fontSize: size }}
+      className="inline-flex items-center font-[family-name:var(--font-display)] font-bold leading-none antialiased whitespace-nowrap"
+      style={{ fontSize: size, letterSpacing: '-0.005em', gap: size * 0.32 }}
     >
-      Box<span style={{ color: 'var(--color-brand)' }}>IA</span>
+      {mark && (
+        <span
+          aria-hidden
+          className="inline-flex items-center justify-center flex-shrink-0"
+          style={{
+            width: markSize,
+            height: markSize,
+            background: 'var(--color-brand)',
+            color: '#fff',
+            borderRadius: markSize * 0.28,
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width={markSize * 0.62}
+            height={markSize * 0.62}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 8L12 3 3 8v8l9 5 9-5z" />
+            <path d="M3 8l9 5 9-5M12 13v8" />
+          </svg>
+        </span>
+      )}
+      <span className="inline-flex items-baseline">
+        <span>Box</span>
+        <span style={{ color: 'var(--color-brand)', marginLeft: size * 0.04 }}>IA</span>
+      </span>
     </span>
   );
 }
