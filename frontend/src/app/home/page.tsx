@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell, BoxLogo } from '@/components/AppShell';
@@ -7,11 +7,16 @@ import { Card, Badge, Avatar } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { api, type Session, type Metrics } from '@/lib/api';
 
+const SWIPE_ACTION_WIDTH = 88;
+const SWIPE_OPEN_THRESHOLD = 40;
+const SWIPE_TAP_TOLERANCE = 6;
+
 export default function HomePage() {
   const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +35,7 @@ export default function HomePage() {
     try {
       await api.del(`/sessions/${id}`);
       setSessions((prev) => prev.filter((s) => s.id !== id));
+      setOpenId(null);
     } catch {
       window.alert('Não foi possível apagar. Tenta de novo.');
     } finally {
@@ -121,49 +127,151 @@ export default function HomePage() {
           </Card>
         )}
         {sessions.map((s) => (
-          <div key={s.id} className="relative">
-            <Link href={s.status === 'ready' ? `/sessions/${s.id}` : `/sessions/${s.id}/processing`}>
-              <Card interactive padded={false} className="p-3.5 flex items-center gap-3.5">
-                <div
-                  className="w-12 h-12 rounded-[14px] flex items-center justify-center font-[family-name:var(--font-display)] text-[18px] font-bold flex-shrink-0"
-                  style={{
-                    background: 'var(--color-brand-soft)',
-                    color: 'var(--color-brand-strong)',
-                  }}
-                >
-                  {s.totalCaixinhas}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    {s.source === 'video'
-                      ? <Icon.Video width={14} height={14} />
-                      : <Icon.Image width={14} height={14} />}
-                    <span className="font-medium text-[14px] truncate">
-                      {s.source === 'video' ? 'Vídeo' : 'Prints'}
-                      {s.historical && ' · antigas'}
-                    </span>
-                    {s.status === 'processing' && <Badge tone="info">lendo...</Badge>}
-                    {s.status === 'failed' && <Badge tone="danger">erro</Badge>}
-                  </div>
-                  <div className="text-[12px] text-[color:var(--color-muted)]">
-                    {fmtDate(s.createdAt)} · {s.totalCaixinhas} caixinhas
-                  </div>
-                </div>
-                <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)] mr-8" />
-              </Card>
-            </Link>
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(s.id); }}
-              disabled={deletingId === s.id}
-              aria-label="Apagar sessão"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full inline-flex items-center justify-center text-[color:var(--color-muted)] hover:text-[#dc2626] hover:bg-red-50 active:scale-95 transition disabled:opacity-40"
-            >
-              <Icon.Trash width={16} height={16} />
-            </button>
-          </div>
+          <SessionRow
+            key={s.id}
+            s={s}
+            isOpen={openId === s.id}
+            deleting={deletingId === s.id}
+            onOpen={() => setOpenId(s.id)}
+            onClose={() => setOpenId((curr) => (curr === s.id ? null : curr))}
+            onDelete={() => handleDelete(s.id)}
+            onNavigate={(href) => router.push(href)}
+          />
         ))}
       </div>
     </AppShell>
+  );
+}
+
+function SessionRow({
+  s, isOpen, deleting, onOpen, onClose, onDelete, onNavigate,
+}: {
+  s: Session;
+  isOpen: boolean;
+  deleting: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onDelete: () => void;
+  onNavigate: (href: string) => void;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const swiped = useRef(false);
+  const cancelled = useRef(false);
+
+  const baseX = isOpen ? -SWIPE_ACTION_WIDTH : 0;
+  const tx = isDragging
+    ? Math.min(0, Math.max(-SWIPE_ACTION_WIDTH * 1.2, baseX + dragX))
+    : baseX;
+
+  const href = s.status === 'ready' ? `/sessions/${s.id}` : `/sessions/${s.id}/processing`;
+
+  function onTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0]!;
+    startX.current = t.clientX;
+    startY.current = t.clientY;
+    swiped.current = false;
+    cancelled.current = false;
+    setDragX(0);
+    setIsDragging(true);
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    if (cancelled.current) return;
+    const t = e.touches[0]!;
+    const dx = t.clientX - startX.current;
+    const dy = t.clientY - startY.current;
+    if (!swiped.current && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+      cancelled.current = true;
+      setIsDragging(false);
+      return;
+    }
+    if (Math.abs(dx) > SWIPE_TAP_TOLERANCE) swiped.current = true;
+    setDragX(dx);
+  }
+
+  function endDrag() {
+    if (!isDragging) return;
+    if (!cancelled.current) {
+      const finalX = baseX + dragX;
+      if (finalX < -SWIPE_OPEN_THRESHOLD) onOpen();
+      else onClose();
+    }
+    setIsDragging(false);
+    setDragX(0);
+  }
+
+  function onClick(e: React.MouseEvent) {
+    if (swiped.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      swiped.current = false;
+      return;
+    }
+    if (isOpen) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    onNavigate(href);
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-[16px]">
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={deleting}
+        aria-label="Excluir sessão"
+        className="absolute right-0 top-0 bottom-0 inline-flex flex-col items-center justify-center gap-1 text-white text-[12px] font-semibold disabled:opacity-60"
+        style={{ width: SWIPE_ACTION_WIDTH, background: '#dc2626' }}
+      >
+        <Icon.Trash width={20} height={20} />
+        <span>Excluir</span>
+      </button>
+
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={endDrag}
+        onTouchCancel={endDrag}
+        onClick={onClick}
+        style={{
+          transform: `translateX(${tx}px)`,
+          transition: isDragging ? 'none' : 'transform 0.22s ease-out',
+          touchAction: 'pan-y',
+        }}
+        className="relative cursor-pointer select-none"
+      >
+        <Card interactive padded={false} className="p-3.5 flex items-center gap-3.5">
+          <div
+            className="w-12 h-12 rounded-[14px] flex items-center justify-center font-[family-name:var(--font-display)] text-[18px] font-bold flex-shrink-0"
+            style={{ background: 'var(--color-brand-soft)', color: 'var(--color-brand-strong)' }}
+          >
+            {s.totalCaixinhas}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              {s.source === 'video'
+                ? <Icon.Video width={14} height={14} />
+                : <Icon.Image width={14} height={14} />}
+              <span className="font-medium text-[14px] truncate">
+                {s.source === 'video' ? 'Vídeo' : 'Prints'}
+                {s.historical && ' · antigas'}
+              </span>
+              {s.status === 'processing' && <Badge tone="info">lendo...</Badge>}
+              {s.status === 'failed' && <Badge tone="danger">erro</Badge>}
+            </div>
+            <div className="text-[12px] text-[color:var(--color-muted)]">
+              {fmtDate(s.createdAt)} · {s.totalCaixinhas} caixinhas
+            </div>
+          </div>
+          <Icon.ChevronRight width={18} height={18} className="text-[color:var(--color-muted-2)]" />
+        </Card>
+      </div>
+    </div>
   );
 }
 
